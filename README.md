@@ -1,5 +1,5 @@
 # scaledVecchia
-Scaled Vecchia approximation of Gaussian processes (Katzfuss et al., 2020)
+R implementation of the scaled Vecchia approximation of Gaussian processes (Katzfuss et al., 2020)
 
 ## Basic use
 To use the scaled Vecchia method on your own data, download and source the file vecchia_scaled.R, including installing the R packages GpGp and GPvecchia listed at the top of that file. Some example code:
