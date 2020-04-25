@@ -2,10 +2,10 @@
 R implementation of the scaled Vecchia approximation of Gaussian processes (Katzfuss et al., 2020)
 
 ## Basic use
-To use the scaled Vecchia method on your own data, download and source the file *vecchia_scaled.R*, including installing the R packages *GpGp* and *GPvecchia* listed at the top of that file. Some example code:
+To use the scaled Vecchia method on your own data, source the file *vecchia_scaled.R*, including installing the R packages *GpGp* and *GPvecchia* listed at the top of that file. Some example code:
 
 ```{r}
-source('vecchia_scaled.R')
+source('https://raw.githubusercontent.com/katzfuss-group/scaledVecchia/master/vecchia_scaled.R')
 
 ## generate some toy data
 inputs=matrix(runif(200),ncol=2)
