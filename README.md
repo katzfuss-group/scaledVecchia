@@ -19,7 +19,7 @@ preds=predictions_scaled(fit,inputs.test)
 ## plot results
 plot(rowSums(inputs.test),preds)
 ```
-For details on the functionality of fit_scaled() and predictions_scaled(), see the vecchia_scaled.R file.
+For details on the functionality of `fit_scaled()` and `predictions_scaled()`, see the vecchia_scaled.R file.
 
 ## Reproducing results
 The other R files here reproduce the figures and results from Katzfuss et al. (2020):
