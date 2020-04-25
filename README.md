@@ -2,7 +2,7 @@
 R implementation of the scaled Vecchia approximation of Gaussian processes (Katzfuss et al., 2020)
 
 ## Basic use
-To use the scaled Vecchia method on your own data, download and source the file vecchia_scaled.R, including installing the R packages GpGp and GPvecchia listed at the top of that file. Some example code:
+To use the scaled Vecchia method on your own data, download and source the file *vecchia_scaled.R*, including installing the R packages *GpGp* and *GPvecchia* listed at the top of that file. Some example code:
 
 ```{r}
 source('vecchia_scaled.R')
@@ -19,12 +19,17 @@ preds=predictions_scaled(fit,inputs.test)
 ## plot results
 plot(rowSums(inputs.test),preds)
 ```
-For details on the functionality of `fit_scaled()` and `predictions_scaled()`, see the vecchia_scaled.R file.
+For details on the functionality of `fit_scaled()` and `predictions_scaled()`, see the *vecchia_scaled.R* file.
 
 ## Reproducing results
 The other R files here reproduce the figures and results from Katzfuss et al. (2020):
+- Figure 1: scaled_NN_illustration.R
+- Figure 2: matern_comparison.R
+- Figure 3: borehole_comparison.R
+- Table 1: testfun_comparison.R
+- Figure 4: satelliteDrag_comparison.R
 
 ## Reference
 <!---
-[Katzfuss, M.... (2020). Title. *arXiv:20.02*.](https://arxiv.org/abs/...)
+[Katzfuss, M., Guinness, J., & Lawrence, E. (2020). Scaled Vecchia approximation for fast computer-model emulation. *arXiv:20.02*.](https://arxiv.org/abs/...)
 --->
