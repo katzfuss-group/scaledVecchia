@@ -132,11 +132,11 @@ fit_scaled=function(y,inputs,ms=c(10,30),trend='zero',X,nu=3.5,nug=0,scale='parm
       } else stop(paste0('invalid argument scale=',scale))
       
       ## order and condition based on current params
-      ord=order_maxmin_exact(t(t(inputs)*scales))
+      ord=GPvecchia::order_maxmin_exact(t(t(inputs)*scales))
       inputs.ord=inputs[ord,,drop=FALSE]
       y.ord=y[ord]
       X.ord=X[ord,,drop=FALSE]
-      NNarray=find_ordered_nn(t(t(inputs.ord)*scales),m)
+      NNarray=GpGp::find_ordered_nn(t(t(inputs.ord)*scales),m)
       
       ## starting and fixed parameters
       cur.parms=c(cur.var,cur.ranges[active],cur.oth)
@@ -145,7 +145,7 @@ fit_scaled=function(y,inputs,ms=c(10,30),trend='zero',X,nu=3.5,nug=0,scale='parm
       if(fix.nug) fixed=c(fixed,length(cur.parms))
       
       ## fisher scoring
-      fit=fit_model2(y.ord,inputs.ord[,active],X.ord,NNarray=NNarray,m_seq=m,
+      fit=GpGp::fit_model(y.ord,inputs.ord[,active],X.ord,NNarray=NNarray,m_seq=m,
                      convtol=tol,start_parms=cur.parms,max_iter=maxit,
                      covfun_name=covfun,silent=(print.level<2),
                      reorder=FALSE,fixed_parms=fixed)
@@ -252,15 +252,15 @@ predictions_scaled <- function(fit,locs_pred,m=100,nsims=0,X_pred,scale='parms')
                                       fix.first=n_obs,searchmult=sm)
   
   # get entries of Linv for obs locations and pred locations
-  Linv_all <- vecchia_Linv(covparms,covfun_name,locs_all,NNarray_all,n_obs+1)
+  Linv_all <- GpGp::vecchia_Linv(covparms,covfun_name,locs_all,NNarray_all,n_obs+1)
   Linv_all[1:n_obs,1] <- 1.0
   
   if(nsims==0){  ## prediction mean
     
     y_withzeros <- c(yord_obs - Xord_obs %*% beta, rep(0,n_pred) )
-    v1 <- Linv_mult(Linv_all, y_withzeros, NNarray_all )
+    v1 <- GpGp::Linv_mult(Linv_all, y_withzeros, NNarray_all )
     v1[inds1] <- 0
-    v2 <- -L_mult(Linv_all,v1,NNarray_all)
+    v2 <- -GpGp::L_mult(Linv_all,v1,NNarray_all)
     
     condexp <- c(v2[inds2] + Xord_pred %*% beta)
     condexp[ord2] <- condexp
@@ -270,12 +270,12 @@ predictions_scaled <- function(fit,locs_pred,m=100,nsims=0,X_pred,scale='parms')
     
     condsim <- matrix(NA, n_pred, nsims)
     for(j in 1:nsims){
-      z <- L_mult(Linv_all, stats::rnorm(n_obs+n_pred), NNarray_all)
+      z <- GpGp::L_mult(Linv_all, stats::rnorm(n_obs+n_pred), NNarray_all)
       
       y_withzeros <- c(yord_obs - Xord_obs %*% beta + z[inds1], rep(0,n_pred) )
-      v1 <- Linv_mult(Linv_all, y_withzeros, NNarray_all )
+      v1 <- GpGp::Linv_mult(Linv_all, y_withzeros, NNarray_all )
       v1[inds1] <- 0
-      v2 <- -L_mult(Linv_all,v1,NNarray_all)
+      v2 <- -GpGp::L_mult(Linv_all,v1,NNarray_all)
       
       condsim[ord2,j] <- c(v2[inds2] + Xord_pred %*% beta) - z[inds2]
     }
@@ -290,8 +290,8 @@ predictions_scaled <- function(fit,locs_pred,m=100,nsims=0,X_pred,scale='parms')
 #######   obs.pred maxmin ordering   ########
 order_maxmin_pred<-function(locs, locs_pred,refine=FALSE){
   
-  ord<-1:nrow(locs) #order_maxmin_exact(locs)
-  ord_pred <-order_maxmin_exact(locs_pred)
+  ord<-1:nrow(locs) #GPvecchia::order_maxmin_exact(locs)
+  ord_pred <-GPvecchia::order_maxmin_exact(locs_pred)
   
   if(refine){
     
@@ -361,10 +361,10 @@ find_ordered_nn_pred <- function(locs,m,fix.first=0,searchmult=2){
   # to the first mult*m+1 by brute force
   maxval <- min( mult*m + 1, n )
   if(fix.first<=maxval){
-    NNarray[1:maxval,] <- find_ordered_nn_brute(locs[1:maxval,,drop=FALSE],m)
+    NNarray[1:maxval,] <- GpGp::find_ordered_nn_brute(locs[1:maxval,,drop=FALSE],m)
   } else {
     maxval=fix.first
-    NNarray[1:(m+1),] <- find_ordered_nn_brute(locs[1:(m+1),,drop=FALSE],m)
+    NNarray[1:(m+1),] <- GpGp::find_ordered_nn_brute(locs[1:(m+1),,drop=FALSE],m)
     NNarray[1:maxval,1]=1:maxval
     NNarray[(m+1):maxval,1+(1:m)]=matrix(rep(1:m,maxval-m),byrow=TRUE,ncol=m)
   }
@@ -431,14 +431,14 @@ predictions_LR <- function(fit,locs_pred,X_pred=matrix(1,nrow(locs_pred),1),m){
   NNarray_all[(m+2):n.all,2:(m+1)]=matrix(rep(fm,n.all-m-1),byrow=TRUE,ncol=m)
 
   # get entries of Linv for obs locations and pred locations
-  Linv_all <- vecchia_Linv(covparms,covfun_name,locs_all,NNarray_all,n_obs+1)
+  Linv_all <- GpGp::vecchia_Linv(covparms,covfun_name,locs_all,NNarray_all,n_obs+1)
   Linv_all[1:n_obs,1] <- 1.0
   
   ## prediction mean
   y_withzeros <- c(yord_obs - Xord_obs %*% beta, rep(0,n_pred) )
-  v1 <- Linv_mult(Linv_all, y_withzeros, NNarray_all )
+  v1 <- GpGp::Linv_mult(Linv_all, y_withzeros, NNarray_all )
   v1[inds1] <- 0
-  v2 <- -L_mult(Linv_all,v1,NNarray_all)
+  v2 <- -GpGp::L_mult(Linv_all,v1,NNarray_all)
   
   condexp <- c(v2[inds2] + Xord_pred %*% beta)
   condexp[ord2] <- condexp

@@ -78,7 +78,7 @@ for(rep in 1:reps){
     ## fit parameters
     y.ord=y[ord]
     start_parms=c(var(y),rep(.2,d),0)
-    fit=fit_model2(y.ord,inputs.ord,NNarray=NNarray,m_seq=m,
+    fit=fit_model(y.ord,inputs.ord,NNarray=NNarray,m_seq=m,
                    start_parms=start_parms,covfun_name=covfun,silent=TRUE,
                    reorder=FALSE,fixed_parms=2+d)
     par.ests[2,i.m,rep,]=fit$covparms[1+(1:d)]
@@ -93,7 +93,7 @@ for(rep in 1:reps){
                                              rep(0,n),inputs.ord,NNarray)[[1]]
     
     ## fit parameters    
-    fit=fit_model2(y.ord,inputs.ord,NNarray=NNarray,m_seq=m,
+    fit=fit_model(y.ord,inputs.ord,NNarray=NNarray,m_seq=m,
                    start_parms=start_parms,covfun_name=covfun,silent=TRUE,
                    reorder=FALSE,fixed_parms=2+d)
     par.ests[3,i.m,rep,]=fit$covparms[1+(1:d)]

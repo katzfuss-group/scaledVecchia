@@ -63,7 +63,7 @@ for(i.n in 1:length(ns)){
       inputs.ord=inputs[ord,]
       y.ord=y[ord]
       NNarray=find_ordered_nn(inputs.ord,m)
-      fit.v=fit_model2(y.ord,inputs.ord,NNarray=NNarray,m_seq=m.seq,
+      fit.v=fit_model(y.ord,inputs.ord,NNarray=NNarray,m_seq=m.seq,
                      X=as.matrix(sample(c(-1,1),n,replace=TRUE)),
                      start_parms=start.parms,max_iter=50,
                      covfun_name=covfun,silent=TRUE,
@@ -76,7 +76,7 @@ for(i.n in 1:length(ns)){
       ### low rank
       fm = NNarray[m+1,2:(m+1)]
       NNarray[(m+2):n,2:(m+1)]=matrix(rep(fm,n-m-1),byrow=TRUE,ncol = m)
-      fit.lr=fit_model2(y.ord,inputs.ord,NNarray=NNarray,m_seq=m.seq,
+      fit.lr=fit_model(y.ord,inputs.ord,NNarray=NNarray,m_seq=m.seq,
                      X=as.matrix(sample(c(-1,1),n,replace=TRUE)),
                      start_parms=start.parms,max_iter=50,
                      covfun_name=covfun,silent=TRUE,
