@@ -3,9 +3,9 @@
 
 ### necessary packages
 
-# devtools::install_github("joeguinness/GpGp")
+# devtools::install_github("joeguinness/GpGp")  # need version >= 0.2.2
 library(GpGp)
-# devtools::install_github("katzfuss-group/GPvecchia")
+# install.packages('GPvecchia')
 library(GPvecchia)
 
 
