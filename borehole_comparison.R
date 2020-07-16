@@ -111,6 +111,7 @@ for(i.n in 1:length(ns)){
 
 load(file='results/bore_mse_comp2.RData')
 rmse=sqrt(apply(mse,2:4,mean,na.rm=TRUE))
+meth.names=meth.names[1:3]; rmse=rmse[1:3,,] # remove (H)laGP results
 
 ms.ind=c(1,3,6)
 ns.ind=c(1,4,6)
@@ -121,7 +122,7 @@ y.ticks=c(.02,.05,.1,.5,1,5,10,15)
 
 
 #### comparison for increasing n
-pdf(file='plots/bore_mse_logn.pdf',width=4.0,height=4.0)
+pdf(file='plots/bore_mse_logn_nolaGP.pdf',width=4.0,height=4.0)
 par(mgp = c(1.6,.5,0), mar=c(2.6,2.6,.3,.5)) # bltr
 plot(1,1,col='white',xlim=range(log10(ns)),ylim=log10(y.range),
      ylab='RMSE',xlab='n',axes=FALSE)
@@ -137,7 +138,7 @@ dev.off()
 
 
 #### comparison for increasing m
-pdf(file='plots/bore_mse.pdf',width=4.0,height=4.0)
+pdf(file='plots/bore_mse_nolaGP.pdf',width=4.0,height=4.0)
 par(mgp = c(1.6,.5,0), mar=c(2.6,2.6,.3,.5)) # bltr
 plot(1,1,col='white',xlim=range(ms),ylim=log10(y.range),
      ylab='RMSE',xlab='m',axes=FALSE)
@@ -152,7 +153,7 @@ dev.off()
 
 
 ### methods legend
-pdf(file='plots/bore_mse_legend.pdf',width=4.0,height=4.0)
+pdf(file='plots/bore_mse_legend_nolaGP.pdf',width=4.0,height=4.0)
 par(mgp = c(1.6,.5,0), mar=c(2.6,2.6,.3,.1)) # bltr
 plot(NULL ,xaxt='n',yaxt='n',bty='n',ylab='',xlab='', xlim=0:1, ylim=0:1)
 legend('center',meth.names,col=1:length(meth.names),lty=1,lwd=2,
