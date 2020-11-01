@@ -145,8 +145,9 @@ fit_scaled=function(y,inputs,ms=c(30),trend='zero',X,nu=3.5,nug=0,scale='parms',
       if(fix.nug) fixed=c(fixed,length(cur.parms))
       
       ## fisher scoring
-      fit=GpGp::fit_model(y.ord,inputs.ord[,active],X.ord,NNarray=NNarray,m_seq=m,
-                     convtol=tol,start_parms=cur.parms,max_iter=maxit,
+      fit=GpGp::fit_model(y.ord,inputs.ord[,active,drop=FALSE],X.ord,
+                     NNarray=NNarray,m_seq=m,convtol=tol,
+                     start_parms=cur.parms,max_iter=maxit,
                      covfun_name=covfun,silent=(print.level<2),
                      reorder=FALSE,fixed_parms=fixed)
       cur.var=fit$covparms[1]
