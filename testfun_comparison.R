@@ -233,3 +233,107 @@ for(i.f in 1:length(testfuns)){
   load(file=paste0('results/testfun_reps_',names(testfuns)[i.f],'.RData'))
   matplot(log10(relevance),xlab='input variable',main=names(testfuns)[i.f])
 }
+
+
+
+
+
+################   assess UQ   ###############
+
+methods=c('SVecchia','Vecchia','laGP','H-laGP')
+m.est=m.lagp=m.hybrid=30
+
+i.f=3
+testfun=testfuns[[i.f]]
+d=testfun$d
+fun=testfun$fun
+print(testfun$name)
+
+## scores: int.cov, int.width, int.score, log.score, CRPS, energy.score
+scores=array(dim=c(length(methods),6,reps))
+
+### repeat data simulation reps times for each function
+for(rep in 1:reps){ # rep=1
+  
+  ### simulate data
+  inputs.train=lhs::randomLHS(n.train,d)
+  y.train=apply(inputs.train,1,fun)
+  inputs.test=matrix(runif(n.test*d),n.test)
+  y.test=apply(inputs.test,1,fun)
+  
+  #### Vecchia methods
+  for(meth in 1:2){ # meth=1
+    
+    print(methods[meth])
+    
+    ## how to scale inputs depends on method
+    if(methods[meth]=='SVecchia'){ scale='parms'
+    } else if(methods[meth]=='Vecchia'){ scale='ranges'
+    }
+    
+    ## estimate parameters
+    fit=fit_scaled(y.train,inputs.train,ms=m.est,scale=scale,n.est=n.est,
+                   find.vcf=TRUE)
+
+    ## make prediction
+    preds=predictions_scaled(fit=fit,locs_pred=inputs.test,m=m.pred,nsims=50,
+                             scale=scale)
+
+    ## compute scores
+    vars=apply(preds$samples,1,var)
+    scores[meth,,rep]=compute_scores(y.test,preds$means,vars,preds$samples)
+    
+  }
+  
+  
+  #### laGP methods
+  
+  g <- 1/10000000  # tiny nugget as suggested by bobby
+  
+  ## laGP - 4 cores
+  la.pred=laGP::aGP(inputs.train,y.train,inputs.test,end=m.lagp,
+                    verb=0,omp.threads=4,g=g)
+  scores[3,,rep]=compute_scores(y.test,la.pred$mean,la.pred$var)
+
+  
+  ## hybrid laGP - 4 cores
+  h.pred=global_local_laGP(inputs.train,y.train,inputs.test,m.hybrid,nth=4)
+  scores[4,,rep]=compute_scores(y.test,h.pred$mean,h.pred$var)
+  
+  
+  #### print and save
+  print(scores[,,rep])
+  save(scores,file=paste0('results/testUQ_m',m.est,'_',
+                                       names(testfuns)[i.f],'.RData'))
+  
+}
+
+
+### print UQ table
+i.f=3
+load(file=paste0('results/testUQ_m',m.est,'_',names(testfuns)[i.f],'.RData'))
+mults=c(1e2,1e5,1e5,1e1,1e5,1e5)
+tab=round(t(t(apply(scores,1:2,mean,na.rm=TRUE))*mults),1)
+rownames(tab)=methods
+colnames(tab)=c('ICov','IWidth','IScore','LogScore','CRPS','Energy')
+print(xtable::xtable(tab,digits=1))
+
+
+
+
+################   estimation of the nugget variance  ###############
+
+i.f=3
+testfun=testfuns[[i.f]]
+fun=testfun$fun
+
+### simulate data with artifical noise
+tau2=.02^2
+inputs.train=lhs::randomLHS(n.train,d)
+y.train=apply(inputs.train,1,fun)+rnorm(n.train,0,sqrt(tau2))
+
+
+### fit SVecchia
+m.est=30
+fit=fit_scaled(y.train,inputs.train,ms=m.est,nug=NULL)
+sqrt(fit$covparms[length(fit$covparms)]*fit$covparms[1])

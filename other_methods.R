@@ -59,7 +59,7 @@ predictions_LR <- function(fit,locs_pred,X_pred=matrix(1,nrow(locs_pred),1),m){
 ## implementation of hybrid laGP -- adapted from Bobby Gramacy
 library(laGP)
 library(tictoc)
-global_local_laGP <- function(xtrain, ytrain, xtest, m, nth=4)
+global_local_laGP <- function(xtrain, ytrain, xtest, m, nth=4,ma=100)
 {
   ## fixing a tiny nugget is very helpful on this problem
   g <- 1/10000000
@@ -68,8 +68,8 @@ global_local_laGP <- function(xtrain, ytrain, xtest, m, nth=4)
   tic()
   N=nrow(xtrain)
   n <- min(1000,N)
-  d2 <- darg(list(mle = TRUE, max = 100), xtrain)
   subs <- sample(1:N, n, replace = FALSE)
+  d2 <- darg(list(mle = TRUE, max = ma), xtrain)
   gpsepi <- newGPsep(xtrain[subs, ], ytrain[subs], 
                      rep(d2$start, ncol(xtrain)), g=g, dK=TRUE)
   that <- mleGPsep(gpsepi, param="d", tmin=d2$min, tmax=d2$max, 
@@ -98,4 +98,49 @@ global_local_laGP <- function(xtrain, ytrain, xtest, m, nth=4)
   out$time.train=time.train
   out$time.pred=time.pred
   return(out)
+}
+
+
+
+## compute several scores assessing UQ
+compute_scores=function(dat,mu,sig2,samples,alpha=.05){
+  
+  scores=rep(NA,times=6)
+  
+  # interval coverage
+  scores[1]=int.cov(dat,mu,sig2,alpha=alpha)
+  
+  # interval width
+  scores[2]=mean(qnorm(1-alpha/2)*sqrt(sig2))
+  
+  # interval score
+  scores[3]=IS.normal(dat,mu,sig2,alpha=alpha)
+  
+  # log score
+  scores[4]=-mean(dnorm(dat,mu,sqrt(sig2),log=TRUE))
+  
+  # CRPS
+  scores[5]=mean(scoringRules::crps_norm(dat,mu,sqrt(sig2)))
+  
+  # energy score
+  if(!missing(samples)) scores[6]=scoringRules::es_sample(dat,samples)
+  
+  return(scores)
+  
+}
+
+## interval score for normal distribution
+IS.normal=function(dat,mu,sig2,alpha=.05){
+  q=qnorm(1-alpha/2)
+  l=mu-q*sqrt(sig2)
+  r=mu+q*sqrt(sig2)
+  width=r-l
+  outside.penalty=(l-dat)*(dat<l)+(dat-r)*(dat>r)
+  mean(width+(2/alpha)*outside.penalty)
+}
+
+## interval coverage for normal distribution
+int.cov=function(dat,mu,sig2,alpha=.05){
+  q=qnorm(1-alpha/2)
+  mean(abs(dat-mu)<=q*sqrt(sig2))
 }

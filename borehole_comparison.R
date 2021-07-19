@@ -31,6 +31,7 @@ fit.sv$covparms=fit.v$covparms=fit.lr$covparms=c(var.ini,ra.ini,nu.fixed,0)
 ### start comparison
 mse=array(dim=c(reps,length(meth.names),length(ms),length(ns)))
 par.ests=array(dim=c(reps,3,length(ms),length(ns),d+1))
+mse.exact=array(dim=c(reps,2))
 
 for(i.n in 1:length(ns)){
   
@@ -47,6 +48,23 @@ for(i.n in 1:length(ns)){
     inputs.test=matrix(runif(n.test*d),n.test)
     y.test=apply(inputs.test,1,bore)
     
+    ### exact GP
+    if(i.n==1 | i.n==3){
+      start.parms=c(var(y),rep(.2,d),0)
+      NNarray.full=find_ordered_nn(matrix(1:n),n-1)
+      fit.exact=fit_model(y,inputs,NNarray=NNarray.full,m_seq=n-1,
+                          X=as.matrix(sample(c(-1,1),n,replace=TRUE)),
+                          start_parms=start.parms,max_iter=50,
+                          covfun_name=covfun,silent=TRUE,
+                          reorder=FALSE,fixed_parms=2+d)
+      K=get(covfun)(fit.exact$covparms,rbind(inputs,inputs.test))
+      cl=t(chol(K))
+      pred.exact=cl[n+(1:n.test),1:n]%*%forwardsolve(cl[1:n,1:n],y)
+      mse.exact[rep,(i.n-1)/2+1]=mean((pred.exact-y.test)^2)
+      save(mse.exact,file='results/bore_mse_exact.RData')
+    }
+    
+    ### vecchia approaches for different m
     for(i.m in 1:length(ms)){
       
       m=ms[i.m]
@@ -179,3 +197,9 @@ matplot(log10(ns),mean.scales[i.m,,],type='l')
 i.n=6
 matplot(ms,mean.scales[,i.n,],type='l')
 
+
+### results for exact GP
+load(file='results/bore_mse_exact.RData')
+rmse.exact=sqrt(apply(mse.exact,2,mean,na.rm=TRUE))
+round(rmse.exact,2)
+round(rmse[1,6,c(1,3)],2) # SVecchia with m=50

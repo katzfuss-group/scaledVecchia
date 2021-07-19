@@ -60,11 +60,6 @@ for(i.s in 1:length(species)){
     inputs.train=as.matrix(sat.data[-ind.test,1:8],rownames=FALSE)
     y.test=as.numeric(sat.data[ind.test,9])
     inputs.test=as.matrix(sat.data[ind.test,1:8],rownames=FALSE)
-    
-    ## estimation data set (smaller, for speed)
-    ind.est=sample(1:n.train,n.est)
-    y.est=y.train[ind.est]
-    inputs.est=inputs.train[ind.est,]
 
     ## loop over GP methods
     for(meth in 1:length(methods)){
@@ -78,17 +73,10 @@ for(i.s in 1:length(species)){
       
       ## estimate parameters on subset
       tic()
-      fit=fit_scaled(y.est,inputs.est,ms=c(m.est),scale=scale)
+      fit=fit_scaled(y.train,inputs.train,ms=c(m.est),n.est=n.est,scale=scale)
       temp=toc()
       time[meth,i.s,1,fold]=temp$toc-temp$tic
       par.ests[meth,i.s,,fold]=fit$covparms[1:(d+1)]
-      
-      ## overwrite training data for prediction on full training set
-      fit$y=y.train
-      fit$locs=inputs.train
-      if(fit$trend=='zero'){ fit$X=as.matrix(rep(0,n.train)) 
-      } else if(fit$trend=='intercept'){ fit$X=as.matrix(rep(1,n.train)) 
-      } else stop()
     
       ## make prediction
       tic()
@@ -170,6 +158,26 @@ matplot(log10(t(par.ests[1,i.s,,])))
 
 
 
+###### plot showing results from individual folds
+## to demonstrate precision of estimates
+
+lrmses=log10(sqrt(mse[,,2,]))
+
+pdf(file='plots/satellite_CV_folds.pdf',width=4.0,height=4.0)
+par(mgp = c(1.6,.5,0), mar=c(2.6,2.6,.3,.3)) # bltr
+matplot(log10(t(rmse.all)),col=cols,pch=pchs,cex=1.5,xaxt='n',yaxt='n',
+        ylab='RMSPE')
+axis(1,at=1:length(species),labels=species,lwd=0,lwd.ticks=1)
+axis(2,at=log10(y.ticks),labels=y.ticks,lwd=0,lwd.ticks=1)
+abline(h=0,col=8)
+for(fold in 1:folds) matplot(t(lrmses[,,fold]),add=TRUE,
+                             col=cols[1:2],pch=pchs[1:2],cex=1.5)
+legend('topright',c(methods,'laGP','H-laGP'),col=c(1,2,4,5),pch=c(1,2,0,4),
+       pt.cex=1.3,bg='white')
+dev.off()
+
+
+
 
 ##########    trajectories   ########
 
@@ -191,11 +199,6 @@ for(i.s in 1:length(species)){
   inputs.train=as.matrix(sat.data[,1:8],rownames=FALSE)
   n.train=nrow(inputs.train)
   
-  ## estimation data set (smaller, for speed)
-  ind.est=sample(1:n.train,n.est)
-  y.est=y.train[ind.est]
-  inputs.est=inputs.train[ind.est,]
-  
   ## loop over GP methods
   for(meth in 1:length(methods)){
     
@@ -207,10 +210,10 @@ for(i.s in 1:length(species)){
     }
     
     ## estimate parameters on subset
-    fit=fit_scaled(y.est,inputs.est,ms=c(m.est),scale=scale)[c(1,2,10,14)]
-      # covparms betahat covfun_name trend
+    fit=fit_scaled(y.train,inputs.train,ms=c(m.est),n.est=n.est,scale=scale,
+                   find.vcf=TRUE)
 
-    save(fit,file=paste0('results/traj_fit_',species[i.s],'_',methods[meth],'.RData'))
+    save(fit,file=paste0('results/trajfit_',species[i.s],'_',methods[meth],'.RData'))
     
   }
 }
@@ -225,7 +228,7 @@ d=8
 parms=array(dim=c(length(species),d+1))
 relevance=array(dim=c(length(species),d))
 for(i.s in 1:length(species)){
-  load(file=paste0('results/traj_fit_',species[i.s],'_',methods[1],'.RData'))
+  load(file=paste0('results/trajfit_',species[i.s],'_',methods[1],'.RData'))
   parms[i.s,]=fit$covparms[1:(d+1)]
   sat.data=read.table(paste0('HSTdata/hst',species[i.s],'.dat'),header=TRUE)
   input.ranges=apply(sat.data[,1:8],2,function(x) diff(range(x)))
@@ -287,29 +290,16 @@ for(i.r in 1:length(regimes)){
     
     print(species[i.s])
     
-    ### load training data
-    sat.data=read.table(paste0('HSTdata/hst',species[i.s],'.dat'),header=TRUE)
-    y.train=as.numeric(sat.data[,9])
-    inputs.train=as.matrix(sat.data[,1:8],rownames=FALSE)
-    n.train=nrow(inputs.train)
-    
     ## loop over GP methods
     for(meth in 1:length(methods)){
       
       print(methods[meth])
       
       ## load parameter estimates
-      load(paste0('results/traj_fit_',species[i.s],'_',methods[meth],'.RData'))
-      
-      ## specify training data
-      fit$y=y.train
-      fit$locs=inputs.train
-      if(fit$trend=='zero'){ fit$X=as.matrix(rep(0,n.train)) 
-      } else if(fit$trend=='intercept'){ fit$X=as.matrix(rep(1,n.train)) 
-      } else stop()
+      load(paste0('results/trajfit_',species[i.s],'_',methods[meth],'.RData'))
       
       ## add nugget for numerical stability
-      fit$covparms[length(fit$covparms)]=fit$covparms[1]*1e-12
+      fit$covparms[length(fit$covparms)]=1e-12
       
       ## how to scale inputs depends on method
       if(methods[meth]=='SVecchia'){ scale='parms'
@@ -335,7 +325,7 @@ for(i.r in 1:length(regimes)){
     rmse.percent[meth,i.r]=sqrt(mean((100*(pred.w[meth,i.r,]-y.test)/y.test)^2))
   }
   
-  save(time,pred.s,pred.w,rmse.percent,file=paste0('results/traj_pred.RData'))
+  save(time,pred.s,pred.w,rmse.percent,file=paste0('results/trajpred.RData'))
   
 }
 
@@ -365,3 +355,121 @@ round((apply(rmse.percent.all[-(1:2),],2,min)/rmse.percent.all[1,]-1)*100,1)
 boxplot(apply(time,1,cbind),ylab='sec')
 
 
+
+
+
+
+#############   comparison on pseudo-trajectories  #####
+
+
+#### create pseudo-trajectories
+
+num.traj=100
+n.traj=100
+traj=array(dim=c(n.traj,num.traj,length(species)))
+
+## random starting points
+set.seed(9999)
+traj[1,,]=sample(1:n.all,num.traj)
+
+for(i.s in 1:length(species)){
+
+  # load data
+  sat.data=read.table(paste0('HSTdata/hst',species[i.s],'.dat'),
+                      header=TRUE)
+  input.ranges=apply(sat.data[,1:8],2,function(x) diff(range(x)))
+  x=t(t(sat.data[,1:8])/input.ranges)
+
+  # create num.traj trajectories
+  for(i.t in 1:num.traj){
+
+    print(i.t)
+
+    inds=1:nrow(x)
+    cur=traj[1,i.t,i.s]
+
+    for(i in 2:n.traj){
+      x.cur=x[cur,,drop=FALSE]
+      inds=setdiff(inds,cur)
+      cur=inds[which.min(fields::rdist(x.cur,x[inds,]))]
+      traj[i,i.t,i.s]=cur
+    }
+
+    save(traj,file=paste0('results/pseudotrajectories.RData'))
+
+  }
+}
+
+load(file=paste0('results/pseudotrajectories.RData'))
+
+
+
+#### compute predictions
+
+source('code/other_methods.R') # laGP and lowRank
+
+m.pred=140
+methods=c('SVecchia','Vecchia')
+
+## scores: int.cov, int.width, int.score, log.score, CRPS, energy.score
+scores=array(dim=c(length(methods),7,length(species),num.traj))
+
+for(i.s in 1:length(species)){
+  
+  print(species[i.s])
+  
+  ### test indices (trajectories)
+  inds.test=c(traj[,,i.s])
+  sat.data=read.table(paste0('HSTdata/hst',species[i.s],'.dat'),header=TRUE)
+  
+  ## loop over GP methods
+  for(meth in 1:length(methods)){
+    
+    print(methods[meth])
+    
+    ## load parameter estimates
+    load(paste0('results/trajfit_',species[i.s],'_',methods[meth],'.RData'))
+    
+    ## specify training data
+    fit$y=fit$y[-inds.test]
+    fit$locs=fit$locs[-inds.test,]
+    fit$X=fit$X[-inds.test,,drop=FALSE]
+    
+    ## how to scale inputs depends on method
+    if(methods[meth]=='SVecchia'){ scale='parms'
+    } else if(methods[meth]=='Vecchia'){ scale='ranges'
+    }
+    
+    ## make prediction
+    for(i.t in 1:num.traj){
+    
+      print(i.t)
+      y.test=as.numeric(sat.data[traj[,i.t,i.s],9])
+      inputs.test=as.matrix(sat.data[traj[,i.t,i.s],1:8],rownames=FALSE)
+    
+      # prediction
+      preds=predictions_scaled(fit=fit,locs_pred=inputs.test,m=m.pred,nsims=50,
+                               scale=scale)
+
+      ## compute scores
+      vars=apply(preds$samples,1,var)
+      rmspe=sqrt(mean((100*(preds$means-y.test)/y.test)^2))
+      uq.scores=compute_scores(y.test,preds$means,vars,preds$samples)
+      scores[meth,,i.s,i.t]=c(rmspe,uq.scores)
+      
+    }
+  }
+  
+  save(scores,file=paste0('results/ptraj_pred.RData'))
+  
+}
+
+
+### print results table in latex format
+load(file=paste0('results/ptraj_pred.RData'))
+i.s=1
+mults=c(1e2,1e2,1e2,1e2,1e1,1e2,1e2)
+tab=round(t(t(apply(scores[,,i.s,],1:2,mean,na.rm=TRUE))*mults),1)
+rownames(tab)=methods
+colnames(tab)=c('RMSPE','ICov','IWidth','IScore','LogScore','CRPS','Energy')
+print(xtable::xtable(tab,digits=1))

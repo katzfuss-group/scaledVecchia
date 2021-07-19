@@ -15,7 +15,8 @@ library(GPvecchia)
 #' @param y data vector of length n
 #' @param inputs nxd matrix of input coordinates
 #' @param ms vector of conditioning-set sizes
-#' @param trend options are 'zero' (no trend), 'intercept', 'linear' (incl intercept)
+#' @param trend options are 'pre' (subtract sample mean as a preprocessing step),
+#' 'zero' (no trend), 'intercept', 'linear' (incl intercept)
 #' @param X nxp trend matrix (use if more complicated trend is desired)
 #' @param nu smoothness parameter. 1.5,2.5,3.5,4.5 avoid bessel (faster). 
 #' estimated if nu=NULL.
@@ -31,6 +32,8 @@ library(GPvecchia)
 #' @param tol.dec converged if dot product between the step and the gradient is 
 #' less than \code{10^(-convtol)}
 #' @param n.est subsample size for estimation
+#' @param find.vcf find a variance correction factor to be used in prediction?
+#' @param vcf.scorefun scoring function to be used for \code{find_vcf()}
 #'
 #' @return Object containing fit information, including for use in predictions_scaled()
 #' @examples
@@ -43,9 +46,9 @@ library(GPvecchia)
 
 #####   fitting function   ########
 
-fit_scaled=function(y,inputs,ms=c(30),trend='zero',X,nu=3.5,nug=0,scale='parms',
+fit_scaled=function(y,inputs,ms=c(30),trend='pre',X,nu=3.5,nug=0,scale='parms',
               var.ini,ranges.ini,select=Inf,print.level=0,max.it=32,tol.dec=4,
-              n.est=min(5e3,nrow(inputs))) {
+              n.est=min(5e3,nrow(inputs)),find.vcf=TRUE,vcf.scorefun=ls) {
   
   ## dimensions
   n=nrow(inputs)
@@ -59,6 +62,10 @@ fit_scaled=function(y,inputs,ms=c(30),trend='zero',X,nu=3.5,nug=0,scale='parms',
       X=as.matrix(rep(1,n))
     } else if(trend=='linear'){
       X=cbind(rep(1,n),inputs)
+    } else if(trend=='pre'){
+      X=as.matrix(sample(c(-1,1),n,replace=TRUE))
+      beta=mean(y)
+      y=y-beta
     } else stop('invalid trend option specified')
   } else trend='X'
   
@@ -170,7 +177,20 @@ fit_scaled=function(y,inputs,ms=c(30),trend='zero',X,nu=3.5,nug=0,scale='parms',
   } else {
     fit$locs=inputs.ord
   }
-  if(trend=='zero') fit$X=as.matrix(rep(0,n))
+  if(trend=='zero') {
+    fit$X=as.matrix(rep(0,n))
+  } else if(trend=='pre') {
+      fit$betahat=beta
+      fit$y=fit$y+beta
+      fit$trend='intercept'
+      fit$X=as.matrix(rep(1,n))
+  }
+  
+  ### find variance correction factor, if requested
+  if(find.vcf){
+    fit$vcf=fit_vcf(fit,scale=scale,scorefun=vcf.scorefun)
+  } else fit$vcf=1
+  
   return(fit)
   
 }
@@ -186,14 +206,18 @@ fit_scaled=function(y,inputs,ms=c(30),trend='zero',X,nu=3.5,nug=0,scale='parms',
 #' @param fit object returned from fit_scaled()
 #' @param locs_pred n.p x d matrix of test/prediction inputs/locations
 #' @param m conditioning-set size (larger is more accurate but slower)
+#' @param joint Joint predictions (does not return variances) or 
+#' separate/independent predictions (does not produce joint samples)
 #' @param n.sims desired number of samples from predictive distributions. 
 #' if \code{n.sims=0}, posterior mean is returned.
+#' @param predvar return prediction variances? (only if \code{joint=FALSE})
 #' @param X_pred n.p x p trend matrix at locs_pred 
 #' (if missing, will be generated based on fit object)
 #' @param scale scaling of inputs for ordering and conditioning. 
 #' 'parms': by parameter estimates. 'ranges': to [0,1]. 'none': no scaling
 #'
-#' @return Vector of length n.p (\code{n.sims=0}) or n.px\code{n.sims} matrix
+#' @return Vector of length n.p (\code{n.sims=0}, \code{predvar=FALSE}) or 
+#' list with entries \code{means} and/or \code{vars} and/or \code{samples}
 #' @examples
 #' inputs=matrix(runif(200),ncol=2)
 #' y=sin(rowSums(inputs*5))
@@ -203,7 +227,8 @@ fit_scaled=function(y,inputs,ms=c(30),trend='zero',X,nu=3.5,nug=0,scale='parms',
 #' plot(rowSums(inputs.test),preds)
 #' @export
 
-predictions_scaled <- function(fit,locs_pred,m=100,nsims=0,X_pred,scale='parms'){
+predictions_scaled <- function(fit,locs_pred,m=100,joint=TRUE,nsims=0,
+                               predvar=FALSE,X_pred,scale='parms'){
   
   y_obs = fit$y
   locs_obs = fit$locs
@@ -213,6 +238,11 @@ predictions_scaled <- function(fit,locs_pred,m=100,nsims=0,X_pred,scale='parms')
   covfun_name = fit$covfun_name
   n_obs <- nrow(locs_obs)
   n_pred <- nrow(locs_pred)
+  if(is.null(fit$vcf)) vcf=1 else vcf=fit$vcf
+  
+  # ## add nugget for numerical stability
+  # if(covparms[length(covparms)]==0) 
+  #   covparms[length(covparms)]=covparms[1]*1e-12
   
   # specify trend if missing
   if(missing(X_pred)){
@@ -230,59 +260,106 @@ predictions_scaled <- function(fit,locs_pred,m=100,nsims=0,X_pred,scale='parms')
   } else if(scale=='ranges'){ scales=1/apply(locs_obs,2,function(x) diff(range(x)))
   } else stop(paste0('invalid argument scale=',scale))
   
-  # get orderings
-  temp=order_maxmin_pred(t(t(locs_obs)*scales),t(t(locs_pred)*scales))
-  ord1=temp$ord
-  ord2=temp$ord_pred
   
-  # reorder stuff
-  X_obs <- as.matrix(X_obs)
-  X_pred <- as.matrix(X_pred)
-  Xord_obs  <- X_obs[ord1,,drop=FALSE]
-  Xord_pred <- X_pred[ord2,,drop=FALSE]
-  yord_obs  <- y_obs[ord1]
-  
-  # put all coordinates together
-  locs_all <- rbind( locs_obs[ord1,,drop=FALSE], locs_pred[ord2,,drop=FALSE] )
-  inds1 <- 1:n_obs
-  inds2 <- (n_obs+1):(n_obs+n_pred)
-  
-  # get nearest neighbor array
-  sm = if (n_pred<1e5) 2 else 1.5
-  NNarray_all <- find_ordered_nn_pred(t(t(locs_all)*scales),m,
-                                      fix.first=n_obs,searchmult=sm)
-  
-  # get entries of Linv for obs locations and pred locations
-  Linv_all <- GpGp::vecchia_Linv(covparms,covfun_name,locs_all,NNarray_all,n_obs+1)
-  Linv_all[1:n_obs,1] <- 1.0
-  
-  if(nsims==0){  ## prediction mean
+  ### 
+  if(joint){  # joint predictions
     
-    y_withzeros <- c(yord_obs - Xord_obs %*% beta, rep(0,n_pred) )
-    v1 <- GpGp::Linv_mult(Linv_all, y_withzeros, NNarray_all )
-    v1[inds1] <- 0
-    v2 <- -GpGp::L_mult(Linv_all,v1,NNarray_all)
+    # get orderings
+    temp=order_maxmin_pred(t(t(locs_obs)*scales),t(t(locs_pred)*scales))
+    ord1=temp$ord
+    ord2=temp$ord_pred
     
-    condexp <- c(v2[inds2] + Xord_pred %*% beta)
-    condexp[ord2] <- condexp
-    return(condexp)
+    # reorder stuff
+    X_obs <- as.matrix(X_obs)
+    X_pred <- as.matrix(X_pred)
+    Xord_obs  <- X_obs[ord1,,drop=FALSE]
+    Xord_pred <- X_pred[ord2,,drop=FALSE]
+    y  <- y_obs[ord1] - Xord_obs %*% beta
     
-  } else {  ## posterior simulations
+    # put all coordinates together
+    locs_all <- rbind( locs_obs[ord1,,drop=FALSE], locs_pred[ord2,,drop=FALSE] )
     
-    condsim <- matrix(NA, n_pred, nsims)
-    for(j in 1:nsims){
-      z <- GpGp::L_mult(Linv_all, stats::rnorm(n_obs+n_pred), NNarray_all)
+    # get nearest neighbor array
+    sm = if (n_pred<1e5) 2 else 1.5
+    NNarray_all <- find_ordered_nn_pred(t(t(locs_all)*scales),m,
+                                        fix.first=n_obs,searchmult=sm)
+    NNarray_pred=NNarray_all[-(1:n_obs),-1]
+    
+    means=numeric(length=n_pred)
+    if(nsims>0) samples=array(dim=c(n_pred,nsims))
+    
+    # make predictions sequentially
+    for(i in 1:n_pred){
       
-      y_withzeros <- c(yord_obs - Xord_obs %*% beta + z[inds1], rep(0,n_pred) )
-      v1 <- GpGp::Linv_mult(Linv_all, y_withzeros, NNarray_all )
-      v1[inds1] <- 0
-      v2 <- -GpGp::L_mult(Linv_all,v1,NNarray_all)
+      # NN conditioning sets
+      NN=sort(NNarray_pred[i,])
+      NN_obs=NN[NN<=n_obs]
+      NN_pred=NN[NN>n_obs]-n_obs
       
-      condsim[ord2,j] <- c(v2[inds2] + Xord_pred %*% beta) - z[inds2]
+      # (co-)variances
+      K=get(covfun_name)(covparms,locs_all[c(NN,i+n_obs),])
+      cl=t(chol(K))
+      
+      # prediction
+      y.NN=y[NN_obs]
+      means[i]=cl[m+1,1:m]%*%forwardsolve(cl[1:m,1:m],c(y.NN,means[NN_pred]))
+      if(nsims>0){ # conditional simulation
+        pred.var=cl[m+1,m+1]^2*vcf
+        for(s in 1:nsims){
+          pm=cl[m+1,1:m]%*%forwardsolve(cl[1:m,1:m],c(y.NN,samples[NN_pred,s]))
+          samples[i,s]=stats::rnorm(1,pm,sqrt(pred.var))
+        }
+      }
+      
     }
-    return(condsim)
+    
+    # add (prior) mean and return to original ordering
+    means[ord2] = means + c(Xord_pred %*% beta) 
+    if(nsims==0){ 
+      preds=means 
+    } else {
+      samples[ord2,] = samples + c(Xord_pred %*% beta)
+      preds=list(means=means,samples=samples)
+    }
+    
+  } else {  # separate predictions
+    
+    if(nsims>0) stop('cannot produce joint samples when joint=FALSE')
+    
+    y  = y_obs - X_obs %*% beta
+    
+    # find the NNs 
+    NNarray=FNN::get.knnx(t(t(locs_obs)*scales),
+                          t(t(locs_pred)*scales),m)$nn.index
+    
+    
+    means=vars=numeric(length=n_pred)
+    for(i in 1:n_pred){
+      
+      # NN conditioning sets
+      NN=NNarray[i,]
+      
+      # (co-)variances
+      K=get(covfun_name)(covparms,rbind(locs_obs[NN,],locs_pred[i,]))
+      cl=t(chol(K))
+      
+      # prediction
+      means[i]=cl[m+1,1:m]%*%forwardsolve(cl[1:m,1:m],y[NN])
+      vars[i]=cl[m+1,m+1]^2*vcf
+      
+    }
+    means=means+c(X_pred %*% beta)
+    
+    if(predvar==FALSE){ 
+      preds=means 
+    } else {
+      preds=list(means=means,vars=vars)
+    }
     
   }
+  
+  return(preds)
+  
 }
 
 
@@ -393,3 +470,33 @@ find_ordered_nn_pred <- function(locs,m,fix.first=0,searchmult=2){
   return(NNarray)
 }
 
+
+
+##########   line search for variance correction factor   ###
+fit_vcf=function(fit,m.pred=140,n.test=min(1e3,round(nrow(fit$locs)/5)),
+                 scale='parms',scorefun=ls){
+  
+  # remove test data from fit object
+  fitsearch=fit
+  inds.test=sample(1:nrow(fit$locs),n.test)
+  fitsearch$y=fit$y[-inds.test]
+  fitsearch$locs=fit$locs[-inds.test,,drop=FALSE]
+  fitsearch$X=fit$X[-inds.test,,drop=FALSE]
+  
+  # make predictions
+  preds=predictions_scaled(fitsearch,locs_pred=fit$locs[inds.test,,drop=FALSE],
+                           m=m.pred,joint=FALSE,predvar=TRUE,scale=scale,
+                           X_pred=fit$X[-inds.test,,drop=FALSE])
+  
+  # optimize correction factor
+  y.test=fit$y[inds.test]
+  objfun=function(vcf) scorefun(y.test,preds$means,preds$vars*vcf)
+  vcf=optimize(objfun,c(1e-6,1e6))$minimum
+  
+  return(vcf)
+  
+}
+
+
+### log score
+ls=function(dat,mu,sig2) -mean(dnorm(dat,mu,sqrt(sig2),log=TRUE))
