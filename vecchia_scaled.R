@@ -329,6 +329,7 @@ predictions_scaled <- function(fit,locs_pred,m=100,joint=TRUE,nsims=0,
     y  = y_obs - X_obs %*% beta
     
     # find the NNs 
+    m=min(m,nrow(locs_obs))
     NNarray=FNN::get.knnx(t(t(locs_obs)*scales),
                           t(t(locs_pred)*scales),m)$nn.index
     
@@ -486,7 +487,7 @@ fit_vcf=function(fit,m.pred=140,n.test=min(1e3,round(nrow(fit$locs)/5)),
   # make predictions
   preds=predictions_scaled(fitsearch,locs_pred=fit$locs[inds.test,,drop=FALSE],
                            m=m.pred,joint=FALSE,predvar=TRUE,scale=scale,
-                           X_pred=fit$X[-inds.test,,drop=FALSE])
+                           X_pred=fit$X[inds.test,,drop=FALSE])
   
   # optimize correction factor
   y.test=fit$y[inds.test]
