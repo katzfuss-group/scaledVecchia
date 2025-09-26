@@ -501,3 +501,6 @@ fit_vcf=function(fit,m.pred=140,n.test=min(1e3,round(nrow(fit$locs)/5)),
 
 ### log score
 ls=function(dat,mu,sig2) -mean(dnorm(dat,mu,sqrt(sig2),log=TRUE))
+
+### define CRPS function in the right format
+crps=function(dat,mu,sig2) mean(scoringRules::crps_norm(dat,mu,sqrt(sig2)))
